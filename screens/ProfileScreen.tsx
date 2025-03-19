@@ -24,8 +24,8 @@ const ProfileScreen = () => {
         <View className="w-24 h-24 bg-white rounded-full items-center justify-center mb-3">
           <Ionicons name="person" size={48} color="#4F46E5" />
         </View>
-        <Text className="text-white text-xl font-semibold">John Doe</Text>
-        <Text className="text-white/80">john.doe@example.com</Text>
+        <Text className="text-white text-xl font-semibold">Anirudh Jyothula</Text>
+        <Text className="text-white/80">anirudhjyothula@gmail.com</Text>
       </View>
 
       {/* Stats */}

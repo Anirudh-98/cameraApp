@@ -13,7 +13,7 @@ const HomeScreen = () => {
       <View className="p-4 bg-indigo-600">
         <View className="flex-row justify-between items-center">
           <View>
-            <Text className="text-2xl font-bold text-white">Welcome Back!</Text>
+            <Text className="text-2xl font-bold text-white">Welcome Anirudh!</Text>
             <Text className="text-white/80 mt-1">Let's keep your privacy protected</Text>
           </View>
           <TouchableOpacity 

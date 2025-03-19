@@ -5,6 +5,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type RootStackParamList = {
   MainTabs: undefined;
+  Login: undefined;
 };
 
 type WelcomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
@@ -19,6 +20,7 @@ const WelcomeScreen = () => {
           source={require('../assets/logo.png')}
           style={styles.logo}
           resizeMode="contain"
+          tintColor="#4F46E5"
         />
         <Text style={styles.title}>Welcome to Hidden Camera Detection</Text>
         <Text style={styles.subtitle}>
@@ -26,12 +28,21 @@ const WelcomeScreen = () => {
         </Text>
       </View>
       
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate('MainTabs')}
-      >
-        <Text style={styles.buttonText}>Get Started</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={[styles.button, styles.loginButton]}
+          onPress={() => navigation.navigate('Login')}
+        >
+          <Text style={[styles.buttonText, styles.loginButtonText]}>Login</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.getStartedButton]}
+          onPress={() => navigation.navigate('MainTabs')}
+        >
+          <Text style={styles.buttonText}>Get Started</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -68,18 +79,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     lineHeight: 24,
   },
+  buttonContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
   button: {
-    backgroundColor: '#4F46E5',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
-    marginBottom: 20,
+    alignItems: 'center',
+  },
+  getStartedButton: {
+    backgroundColor: '#4F46E5',
+  },
+  loginButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#4F46E5',
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  loginButtonText: {
+    color: '#4F46E5',
   },
 });
 

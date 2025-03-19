@@ -1,156 +1,124 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { View, Text, TextInput, TouchableOpacity, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 
-// Define the type for your stack navigator's parameters
 type RootStackParamList = {
   Welcome: undefined;
-  Home: undefined;
-  Scan: undefined;
+  MainTabs: undefined;
   Login: undefined;
 };
 
-// Define the props for LoginScreen
-type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
+type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
+const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const navigation = useNavigation<LoginScreenNavigationProp>();
 
   const handleLogin = () => {
-    console.log('Login pressed', email, password);
+    // Implement login logic here
+    navigation.navigate('MainTabs');
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.container}>
+      
+      {/* Back Button */}
+      <TouchableOpacity 
+        onPress={() => navigation.goBack()}
+        className="p-4"
+      >
+        <Ionicons name="arrow-back" size={24} color="#1F2937" />
+      </TouchableOpacity>
 
-        <Text style={styles.header}>Welcome Back!</Text>
+      <View className="flex-1 px-6">
+        {/* Header */}
+        <View className="mb-8">
+          <Text className="text-3xl font-bold text-gray-900 mb-2">Welcome Back!</Text>
+          <Text className="text-gray-600 text-base">Sign in to continue using the app</Text>
+        </View>
 
-        <View style={styles.inputContainer}>
-          <View style={styles.inputField}>
-            <Icon name="mail-outline" size={24} color="#999" style={styles.inputIcon} />
+        {/* Input Fields */}
+        <View className="space-y-4">
+          <View className="bg-gray-50 rounded-xl flex-row items-center px-4 border border-gray-200">
+            <Ionicons name="mail-outline" size={20} color="#6B7280" />
             <TextInput
-              style={styles.input}
+              className="flex-1 py-4 px-3 text-gray-900"
               placeholder="Email"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
-          <View style={styles.inputField}>
-            <Icon name="lock-closed-outline" size={24} color="#999" style={styles.inputIcon} />
+
+          <View className="bg-gray-50 rounded-xl flex-row items-center px-4 border border-gray-200">
+            <Ionicons name="lock-closed-outline" size={20} color="#6B7280" />
             <TextInput
-              style={styles.input}
+              className="flex-1 py-4 px-3 text-gray-900"
               placeholder="Password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              autoCapitalize="none"
             />
           </View>
         </View>
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Login</Text>
+        {/* Forgot Password */}
+        <TouchableOpacity className="mt-4 items-end">
+          <Text className="text-indigo-600 font-medium">Forgot Password?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.forgotPasswordButton} onPress={() => { /* Handle forgot password action */ }}>
-          <Text style={styles.forgotPasswordButtonText}>Forgot Password?</Text>
+        {/* Login Button */}
+        <TouchableOpacity
+          onPress={handleLogin}
+          className="bg-indigo-600 rounded-xl py-4 mt-8"
+        >
+          <Text className="text-white text-center font-semibold text-lg">Sign In</Text>
         </TouchableOpacity>
 
-        <Text style={styles.signupText}>
-          Don't have an account?{' '}
-          <TouchableOpacity onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.signupLinkText}>Sign up</Text>
+        {/* Divider */}
+        <View className="flex-row items-center my-8">
+          <View className="flex-1 h-[1px] bg-gray-300" />
+          <Text className="mx-4 text-gray-500">Or continue with</Text>
+          <View className="flex-1 h-[1px] bg-gray-300" />
+        </View>
+
+        {/* Social Login Buttons */}
+        <View className="space-y-4">
+          <TouchableOpacity 
+            className="flex-row items-center justify-center py-4 bg-white border border-gray-300 rounded-xl"
+            onPress={() => {/* Implement Google Sign In */}}
+          >
+            <Ionicons name="logo-google" size={20} color="#EA4335" className="mr-2" />
+            <Text className="text-gray-800 font-medium ml-2">Continue with Google</Text>
           </TouchableOpacity>
-        </Text>
 
-        
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity 
+              className="flex-row items-center justify-center py-4 bg-black rounded-xl"
+              onPress={() => {/* Implement Apple Sign In */}}
+            >
+              <Ionicons name="logo-apple" size={20} color="#FFFFFF" className="mr-2" />
+              <Text className="text-white font-medium ml-2">Continue with Apple</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
+        {/* Sign Up Link */}
+        <View className="mt-8 flex-row justify-center">
+          <Text className="text-gray-600">Don't have an account? </Text>
+          <TouchableOpacity onPress={() => {/* Handle Sign Up */}}>
+            <Text className="text-indigo-600 font-medium">Sign Up</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: '#FFFFFF',
-    },
-    container: {
-      flex: 1,
-      padding: 20,
-      justifyContent: 'center', // Center content vertically
-      alignItems: 'center', // Center content horizontally
-    },
-    header: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: '#333',
-      marginBottom: 40,
-      textAlign: 'center',
-    },
-    inputContainer: {
-      width: '100%',
-      marginBottom: 20,
-    },
-    inputField: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: '#CCC',
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      marginBottom: 10,
-    },
-    inputIcon: {
-      marginRight: 10,
-    },
-    input: {
-      flex: 1,
-      height: 40,
-    },
-    loginButton: {
-      backgroundColor: '#9370DB',
-      paddingVertical: 15,
-      paddingHorizontal: 120,
-      borderRadius: 8,
-      alignItems: 'center',
-      marginBottom: 20,
-    },
-    loginButtonText: {
-      fontSize: 18,
-      color: '#FFFFFF',
-      fontWeight: 'bold',
-    },
-    forgotPasswordButton: {
-      marginBottom: 20,
-    },
-    forgotPasswordButtonText: {
-      fontSize: 16,
-      color: '#333',
-    },
-    signupText: {
-      fontSize: 16,
-      color: '#333',
-      marginBottom: 40,
-    },
-    signupLinkText: {
-      color: '#9370DB',
-      fontWeight: 'bold',
-    },
-    bottomTabBar: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      paddingVertical: 15,
-      borderTopWidth: 1,
-      borderTopColor: '#EEE',
-      position: 'absolute',
-      bottom: 0,
-      width: '100%',
-    },
-  });
-  
-  export default LoginScreen;
+export default LoginScreen;
