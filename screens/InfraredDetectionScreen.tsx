@@ -1,187 +1,124 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Dimensions } from 'react-native';
-import { Camera } from 'expo-camera';
-import { Audio } from 'expo-av';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraType } from 'expo-camera/build/Camera.types'; // Import CameraType as a value
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import type { InfraredDetectionScreenProps } from '../types';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface BrightSpot {
-  x: number;
-  y: number;
-  intensity: number;
-  size: number;
-  pattern: string;
-}
-
-interface CameraSettings {
-  iso: number;
-  exposure: number;
-  whiteBalance: number;
+  x: number; // Normalized x position (0 to 1)
+  y: number; // Normalized y position (0 to 1)
+  intensity: number; // Brightness intensity (0 to 1)
+  size: number; // Size of the spot (0 to 1)
 }
 
 const InfraredDetectionScreen = () => {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [detectedSpots, setDetectedSpots] = useState<BrightSpot[]>([]);
-  const [sensitivity, setSensitivity] = useState(0.5);
-  const [showSettings, setShowSettings] = useState(false);
-  const [cameraSettings, setCameraSettings] = useState<CameraSettings>({
-    iso: 800,
-    exposure: -2,
-    whiteBalance: 0,
-  });
-  const [previousFrame, setPreviousFrame] = useState<string | null>(null);
-  const [detectionMode, setDetectionMode] = useState<'ir' | 'motion' | 'pattern'>('ir');
-  const [motionThreshold, setMotionThreshold] = useState(0.3);
-  const [patternThreshold, setPatternThreshold] = useState(0.6);
-  const cameraRef = useRef<any>(null);
-  const navigation = useNavigation<InfraredDetectionScreenProps>();
+  const [facing, setFacing] = useState<'front' | 'back'>('back');  // Use CameraType as a value
+  const [permission, requestPermission] = useCameraPermissions(); // Camera permissions
+  const [isDetecting, setIsDetecting] = useState(false); // Detection state
+  const [detectedSpots, setDetectedSpots] = useState<BrightSpot[]>([]); // Detected bright spots
+  const [sensitivity, setSensitivity] = useState(0.5); // Sensitivity for detection
+  const cameraRef = useRef<CameraView>(null); // Camera ref
 
+  // Request camera permissions
   useEffect(() => {
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-
-      const { sound } = await Audio.Sound.createAsync(
-        require('../assets/sounds/alert.mp3')
-      );
-      setSound(sound);
+      if (!permission?.granted) {
+        await requestPermission();
+      }
     })();
-  }, []);
+  }, [permission]);
 
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+  // Process each frame to detect bright spots (IR reflections)
+  const processFrame = async () => {
+    if (!cameraRef.current || !isDetecting) return;
 
-  const processFrame = async (frame: any) => {
     try {
-      let brightSpots: BrightSpot[] = [];
+      const frame = await cameraRef.current.takePictureAsync({
+        quality: 0.5, // Lower quality for faster processing
+        base64: true, // Include base64 data for analysis
+      });
 
-      switch (detectionMode) {
-        case 'ir':
-          brightSpots = await detectBrightSpots(frame.uri);
-          break;
-        case 'motion':
-          brightSpots = await detectMotion(frame.uri);
-          break;
-        case 'pattern':
-          brightSpots = await detectPatterns(frame.uri);
-          break;
+      if (!frame) {
+        console.error('Frame is undefined');
+        return;
       }
 
+      const brightSpots = await detectBrightSpots(frame.uri);
       setDetectedSpots(brightSpots);
 
       if (brightSpots.length > 0) {
-        const confidence = calculateConfidence(brightSpots);
-        if (confidence > 0.7) {
-          Alert.alert(
-            'Camera Detected!',
-            `Found ${brightSpots.length} potential camera${brightSpots.length > 1 ? 's' : ''} with ${Math.round(confidence * 100)}% confidence.`,
-            [{ text: 'OK' }]
-          );
-
-          if (sound) {
-            await sound.replayAsync();
-          }
-        }
+        Alert.alert(
+          'Potential Camera Detected!',
+          `Found ${brightSpots.length} bright spot${brightSpots.length > 1 ? 's' : ''}.`,
+          [{ text: 'OK' }]
+        );
       }
-
-      setPreviousFrame(frame.uri);
     } catch (error) {
       console.error('Error processing frame:', error);
     }
   };
 
+  // Detect bright spots in the image
   const detectBrightSpots = async (imageUri: string): Promise<BrightSpot[]> => {
     const brightSpots: BrightSpot[] = [];
-    
+
     try {
       const response = await fetch(imageUri);
       const blob = await response.blob();
-      const reader = new FileReader();
-      
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        const img = new Image();
-        
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
-          
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
-          
-          // Enhanced IR detection algorithm
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            
-            // IR light typically appears as bright red
-            const isIR = r > 200 && g < 100 && b < 100;
-            const brightness = (r + g + b) / 3;
-            
-            if ((isIR || brightness > 255 * sensitivity) && isClusterBright(data, i, canvas.width)) {
-              const x = (i / 4) % canvas.width;
-              const y = Math.floor((i / 4) / canvas.width);
-              const size = measureSpotSize(data, i, canvas.width);
-              
-              brightSpots.push({
-                x: x / canvas.width,
-                y: y / canvas.height,
-                intensity: brightness / 255,
-                size,
-                pattern: detectPattern(data, i, canvas.width),
-              });
-            }
-          }
-        };
-        
-        img.src = base64;
-      };
-      
-      reader.readAsDataURL(blob);
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+
+      const img = new Image();
+      img.src = base64;
+
+      await new Promise((resolve) => (img.onload = resolve));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return brightSpots;
+
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // Analyze each pixel for brightness
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const brightness = (r + g + b) / 3; // Average brightness
+
+        // Detect bright spots (IR reflections)
+        if (brightness > 255 * sensitivity && isClusterBright(data, i, canvas.width)) {
+          const x = (i / 4) % canvas.width;
+          const y = Math.floor((i / 4) / canvas.width);
+          const size = measureSpotSize(data, i, canvas.width);
+
+          brightSpots.push({
+            x: x / canvas.width, // Normalize x position
+            y: y / canvas.height, // Normalize y position
+            intensity: brightness / 255, // Normalize intensity
+            size: size / 100, // Normalize size
+          });
+        }
+      }
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error('Error detecting bright spots:', error);
     }
-    
+
     return brightSpots;
   };
 
-  const detectMotion = async (currentFrame: string): Promise<BrightSpot[]> => {
-    if (!previousFrame) return [];
-    
-    const spots: BrightSpot[] = [];
-    // Implement motion detection by comparing current and previous frames
-    // This is a simplified version - in a real app, you'd use more sophisticated
-    // motion detection algorithms like optical flow
-    return spots;
-  };
-
-  const detectPatterns = async (imageUri: string): Promise<BrightSpot[]> => {
-    const spots: BrightSpot[] = [];
-    // Implement pattern recognition to detect common camera patterns
-    // This could include lens patterns, IR LED arrays, etc.
-    return spots;
-  };
-
+  // Check if a pixel is part of a bright cluster
   const isClusterBright = (data: Uint8ClampedArray, index: number, width: number): boolean => {
-    // Check if the bright pixel is part of a cluster (reduces false positives)
-    const clusterSize = 3;
+    const clusterSize = 3; // Check surrounding pixels
     let brightCount = 0;
-    
+
     for (let i = -clusterSize; i <= clusterSize; i++) {
       for (let j = -clusterSize; j <= clusterSize; j++) {
         const idx = index + (i * width + j) * 4;
@@ -191,15 +128,15 @@ const InfraredDetectionScreen = () => {
         }
       }
     }
-    
-    return brightCount > (clusterSize * 2 + 1) * (clusterSize * 2 + 1) * 0.5;
+
+    return brightCount > 5; // At least 5 bright pixels in the cluster
   };
 
+  // Measure the size of a bright spot
   const measureSpotSize = (data: Uint8ClampedArray, index: number, width: number): number => {
-    // Measure the size of the bright spot
     let size = 0;
     const threshold = 200;
-    
+
     for (let i = -5; i <= 5; i++) {
       for (let j = -5; j <= 5; j++) {
         const idx = index + (i * width + j) * 4;
@@ -209,68 +146,28 @@ const InfraredDetectionScreen = () => {
         }
       }
     }
-    
-    return size / 121; // Normalize to 0-1
+
+    return size;
   };
 
-  const detectPattern = (data: Uint8ClampedArray, index: number, width: number): string => {
-    // Detect common camera patterns (lens, LED array, etc.)
-    // This is a simplified version - in a real app, you'd use more sophisticated
-    // pattern recognition algorithms
-    return 'unknown';
+  // Start/stop detection
+  const toggleDetection = () => {
+    if (isDetecting) {
+      setIsDetecting(false);
+      setDetectedSpots([]);
+    } else {
+      setIsDetecting(true);
+      const interval = setInterval(processFrame, 1000); // Process frames every second
+      return () => clearInterval(interval);
+    }
   };
 
-  const calculateConfidence = (spots: BrightSpot[]): number => {
-    // Calculate overall detection confidence based on multiple factors
-    let confidence = 0;
-    
-    spots.forEach(spot => {
-      // Consider intensity, size, and pattern
-      confidence += (spot.intensity * 0.4 + spot.size * 0.3 + 0.3) / spots.length;
-    });
-    
-    return confidence;
-  };
-
-  const startDetection = () => {
-    setIsDetecting(true);
-    setDetectedSpots([]);
-    setPreviousFrame(null);
-    
-    const interval = setInterval(async () => {
-      if (cameraRef.current && isDetecting) {
-        try {
-          const frame = await cameraRef.current.takePictureAsync({
-            quality: 0.5,
-            base64: true,
-            exif: true,
-          });
-          await processFrame(frame);
-        } catch (error) {
-          console.error('Error capturing frame:', error);
-        }
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  };
-
-  const stopDetection = () => {
-    setIsDetecting(false);
-  };
-
+  // Adjust sensitivity
   const adjustSensitivity = (increment: number) => {
-    setSensitivity(prev => Math.max(0.1, Math.min(0.9, prev + increment)));
+    setSensitivity((prev) => Math.max(0.1, Math.min(0.9, prev + increment)));
   };
 
-  const updateCameraSettings = (setting: keyof CameraSettings, value: number) => {
-    setCameraSettings(prev => ({
-      ...prev,
-      [setting]: value,
-    }));
-  };
-
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.container}>
         <Text style={styles.text}>Requesting camera permission...</Text>
@@ -278,14 +175,11 @@ const InfraredDetectionScreen = () => {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>No access to camera</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => Camera.requestCameraPermissionsAsync()}
-        >
+        <Text style={styles.text}>We need your permission to show the camera</Text>
+        <TouchableOpacity style={styles.button} onPress={requestPermission}>
           <Text style={styles.buttonText}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
@@ -294,11 +188,10 @@ const InfraredDetectionScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* @ts-ignore */}
-      <Camera
+      <CameraView
         ref={cameraRef}
         style={styles.camera}
-        type={0}
+        facing={facing}
       >
         <View style={styles.overlay}>
           <View style={styles.controls}>
@@ -310,7 +203,7 @@ const InfraredDetectionScreen = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, isDetecting && styles.buttonActive]}
-              onPress={isDetecting ? stopDetection : startDetection}
+              onPress={toggleDetection}
             >
               <Ionicons
                 name={isDetecting ? 'stop-circle' : 'scan-circle'}
@@ -326,27 +219,6 @@ const InfraredDetectionScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modeSelector}>
-            <TouchableOpacity
-              style={[styles.modeButton, detectionMode === 'ir' && styles.modeButtonActive]}
-              onPress={() => setDetectionMode('ir')}
-            >
-              <Text style={styles.modeButtonText}>IR</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeButton, detectionMode === 'motion' && styles.modeButtonActive]}
-              onPress={() => setDetectionMode('motion')}
-            >
-              <Text style={styles.modeButtonText}>Motion</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeButton, detectionMode === 'pattern' && styles.modeButtonActive]}
-              onPress={() => setDetectionMode('pattern')}
-            >
-              <Text style={styles.modeButtonText}>Pattern</Text>
-            </TouchableOpacity>
-          </View>
-          
           {/* Visual feedback for detected spots */}
           {detectedSpots.map((spot, index) => (
             <View
@@ -364,11 +236,11 @@ const InfraredDetectionScreen = () => {
               ]}
             />
           ))}
-          
+
           <View style={styles.guide}>
             <Text style={styles.guideText}>
               {isDetecting
-                ? `Scanning for cameras... (${detectedSpots.length} detected)`
+                ? `Scanning for hidden cameras... (${detectedSpots.length} detected)`
                 : 'Press the button to start scanning'}
             </Text>
             <Text style={styles.tipText}>
@@ -377,12 +249,9 @@ const InfraredDetectionScreen = () => {
             <Text style={styles.sensitivityText}>
               Sensitivity: {Math.round(sensitivity * 100)}%
             </Text>
-            <Text style={styles.modeText}>
-              Mode: {detectionMode.charAt(0).toUpperCase() + detectionMode.slice(1)}
-            </Text>
           </View>
         </View>
-      </Camera>
+      </CameraView>
     </View>
   );
 };
@@ -405,26 +274,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modeSelector: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  modeButton: {
-    backgroundColor: 'rgba(79, 70, 229, 0.5)',
-    padding: 8,
-    borderRadius: 15,
-    marginHorizontal: 5,
-  },
-  modeButtonActive: {
-    backgroundColor: '#4F46E5',
-  },
-  modeButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   button: {
     backgroundColor: '#4F46E5',
@@ -465,12 +314,6 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 4,
-  },
-  modeText: {
-    color: '#4F46E5',
-    fontSize: 14,
-    textAlign: 'center',
   },
   text: {
     color: 'white',
@@ -486,4 +329,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default InfraredDetectionScreen; 
+export default InfraredDetectionScreen;
